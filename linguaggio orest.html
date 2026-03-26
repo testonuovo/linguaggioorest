@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Orest Online - Programma e Esegui</title>
+<style>
+body { font-family: Arial, sans-serif; background: #f8f9fa; padding: 20px; }
+h1 { color: #333; }
+textarea { width: 100%; height: 250px; font-family: monospace; font-size: 14px; margin-bottom: 10px; }
+button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
+#output { background: #fff; border: 1px solid #ccc; padding: 10px; min-height: 120px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Orest Online</h1>
+<p>Scrivi il tuo programma Orest (termina con <code>/or</code>)</p>
+<textarea id="codice"></textarea><br>
+<button onclick="eseguiOrest()">Esegui Programma</button>
+<div id="output"></div>
+
+<script>
+const funzioni = {};
+
+function eseguiOrest() {
+    const codice = document.getElementById('codice').value;
+    const righe = codice.split('\n').map(r => r.trim()).filter(r => r !== "");
+    const output = [];
+    let i = 0;
+
+    function eseguiBlocco(start, end, variabiliLocali = {}) {
+        const variabili = {...variabiliLocali};
+
+        for (let j = start; j < end; j++) {
+            const r = righe[j];
+
+            if (r.startsWith("lt integer")) {
+                const parts = r.split("=");
+                const nome = parts[0].split(" ")[2].trim();
+                variabili[nome] = parseInt(parts[1].trim());
+            } else if (r.startsWith("lt string")) {
+                const parts = r.split("=");
+                const nome = parts[0].split(" ")[2].trim();
+                variabili[nome] = parts[1].trim().replace(/"/g, '');
+            } else if (r.startsWith("print")) {
+                const arg = r.substring(6).trim();
+                output.push(variabili.hasOwnProperty(arg) ? variabili[arg] : arg.replace(/"/g, ""));
+            } else if (r.startsWith("if")) {
+                const condizione = r.match(/if (.+) then/)[1];
+                const [varName, operatore, valore] = condizione.split(" ");
+                let cond = false;
+                if (operatore === ">") cond = variabili[varName] > parseInt(valore);
+                if (operatore === "<") cond = variabili[varName] < parseInt(valore);
+                if (operatore === "==") cond = variabili[varName] == parseInt(valore);
+
+                let endIndex = j;
+                for (let k = j + 1; k < righe.length; k++) {
+                    if (righe[k] === "end" || righe[k] === "Altrimenti") { endIndex = k; break; }
+                }
+
+                if (cond) eseguiBlocco(j + 1, endIndex, variabili);
+                else {
+                    for (let k = j + 1; k < righe.length; k++) {
+                        if (righe[k] === "Altrimenti") {
+                            let fineAlt = k;
+                            for (let m = k + 1; m < righe.length; m++) {
+                                if (righe[m] === "end") { fineAlt = m; break; }
+                            }
+                            eseguiBlocco(k + 1, fineAlt, variabili);
+                            break;
+                        }
+                    }
+                }
+                j = endIndex;
+            } else if (r.startsWith("for")) {
+                const match = r.match(/for (\w+) = (\d+) to (\d+)/);
+                if (!match) continue;
+                const [iVar, startVal, endVal] = match.slice(1);
+                let endIndex = j;
+                for (let k = j + 1; k < righe.length; k++) {
+                    if (righe[k] === "end") { endIndex = k; break; }
+                }
+                for (let n = parseInt(startVal); n <= parseInt(endVal); n++) {
+                    variabili[iVar] = n;
+                    eseguiBlocco(j + 1, endIndex, variabili);
+                }
+                j = endIndex;
+            } else if (r.startsWith("or function")) {
+                const fnMatch = r.match(/or function (\w+)\((.*)\)/);
+                if (!fnMatch) continue;
+                const fnName = fnMatch[1];
+                const fnParams = fnMatch[2].split(",").map(p => p.trim()).filter(p => p !== "");
+                let endIndex = j;
+                for (let k = j + 1; k < righe.length; k++) {
+                    if (righe[k] === "end") { endIndex = k; break; }
+                }
+                funzioni[fnName] = {righe: righe.slice(j + 1, endIndex), params: fnParams};
+                j = endIndex;
+            } else if (r.includes("(") && r.includes(")")) {
+                const fnName = r.split("(")[0];
+                if (funzioni.hasOwnProperty(fnName)) {
+                    const args = r.match(/\((.*)\)/)[1].split(",").map(a => a.trim());
+                    const fn = funzioni[fnName];
+                    const loc = {};
+                    fn.params.forEach((p, idx) => { loc[p] = args[idx].replace(/"/g,''); });
+                    eseguiBlocco(0, fn.righe.length, loc);
+                }
+            }
+        }
+    }
+
+    eseguiBlocco(0, righe.length);
+    document.getElementById('output').innerHTML = output.join("\n");
+}
+</script>
+</body>
+</html>
